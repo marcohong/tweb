@@ -117,8 +117,7 @@ class HttpServer:
 
     def get_settings(self, settings_: dict = None) -> dict:
         '''Tornado settings'''
-        debug = False if (self.options.debug is not None
-                          and self.options.debug is False) else True
+        debug = self.conf.get_bool_option('setting', '_debug', False)
         cookie_secret = self.conf.get_option('setting', 'cookie_secret',
                                              DEF_COOKIE_SECRET)
         data = default_settings(debug, cookie_secret=cookie_secret)
