@@ -236,8 +236,11 @@ class HttpServer:
         if not tasks or not self.application:
             return
         _tasks = []
-        for func in tasks:
-            _func = func()
+        for obj in tasks:
+            if obj['func'].__code__.co_argcount > 0:
+                _func = obj['func'](*obj.get('args'), **obj.get('kwargs'))
+            else:
+                _func = obj['func']()
             if isinstance(_func, types.CoroutineType):
                 _tasks.append(_func)
         self.application.init_with_loop(IOLoop.current().asyncio_loop, _tasks)

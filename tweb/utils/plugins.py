@@ -12,25 +12,29 @@ usage:
     plugins.register(test2)
 '''
 import types
-from typing import Optional
+from typing import Optional, Any
 
 from tweb.utils.single import SingleClass
 __all__ = ['plugins']
 
 
 class Plugins(SingleClass):
-    # id:method/function
+    # {id:{func,args,kwargs}}
     _methods = {}
 
-    def register(self, func: callable):
+    def register(self, func: callable, *args: Any, **kwargs: Any) -> None:
         '''
         Register plugin
         '''
         if not isinstance(func, (types.FunctionType, types.MethodType)):
             raise TypeError(f'{func} must be a function')
-        self._methods[id(func)] = func
+        self._methods[id(func)] = {
+            'func': func,
+            'args': args,
+            'kwargs': kwargs
+        }
 
-    def unregister(self, func: callable):
+    def unregister(self, func: callable) -> None:
         '''
         Remove plugin
         '''
