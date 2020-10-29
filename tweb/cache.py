@@ -1,106 +1,62 @@
-'''
-Redis cache base classes.
-'''
-import aioredis
-from typing import Any, Callable, Union, Awaitable
+import aredis
+from redis.sentinel import Sentinel
+from typing import Any, Optional, Union, Awaitable
 
 from .config import Config
 from .exceptions import NotFoundError
 from tweb.utils.attr_util import AttrDict
 from tweb.utils.log import logger
-__all__ = ['MemRedis', 'StrCache', 'DictCache']
 
 
-async def create_redis_pool(address,
-                            *,
-                            db=None,
-                            password=None,
-                            ssl=None,
-                            encoding=None,
-                            minsize=1,
-                            maxsize=10,
-                            timeout=None,
-                            loop=None) -> Callable[..., None]:
-    return await aioredis.create_redis_pool(address,
-                                            db=db,
-                                            password=password,
-                                            ssl=ssl,
-                                            encoding=encoding,
-                                            minsize=minsize,
-                                            maxsize=maxsize,
-                                            timeout=timeout,
-                                            loop=loop)
-
-
-async def create_sentinel_pool(sentinels: Union[list, tuple],
-                               master: str,
-                               *,
-                               db=None,
-                               password=None,
-                               encoding=None,
-                               minsize=1,
-                               maxsize=10,
-                               ssl=None,
-                               parser=None,
-                               loop=None) -> Callable[..., None]:
-    conn = await aioredis.sentinel.create_sentinel_pool(sentinels,
-                                                        db=db,
-                                                        password=password,
-                                                        encoding=encoding,
-                                                        minsize=minsize,
-                                                        maxsize=maxsize,
-                                                        ssl=ssl,
-                                                        parser=parser,
-                                                        loop=loop)
-    conn.master_for(master)
-    return conn
-
-
-class MemRedis:
+class Cache:
     '''
-    Create redis cache calsses.
+    Create redis cache calss.
+
+    usage::
+
+    url = 'redis://localhost:6379/0'
+    cache = Cache(url).initialize()
     '''
     def __init__(self,
-                 address: Union[str, tuple, list] = None,
+                 address,
                  conf_prefix: str = None,
                  is_sentinel: bool = False,
-                 strict: bool = True,
-                 **kwargs):
+                 decode_responses=True,
+                 **kwargs: Any):
         '''
         redis init
 
-        :param address: `<str/tuple/list>`
+        :param address: `<str/list>` url or [(ip,port),...]
             if is_sentinel is True, address = [(ip,port),...]
         :param conf_prefix: `<str>` priority: address > conf_prefix
             e.g: user_redis_url -> MemRedis(conf_prefix='user')
             if is_sentinel is True, deprecated.
         :param is_sentinel: `<bool>` default False
-        :param strict: `<bool>` redis strict, default True
         :param kwargs: `<Any>` redis connection kwargs
         :return:
         '''
         self.cache = None
-        self.strict = strict
         self.address = address
         self.is_sentinel = is_sentinel
         if is_sentinel:
-            self.create_pool = create_sentinel_pool
+            self._redis = Sentinel
         else:
-            self.create_pool = create_redis_pool
+            self._redis = aredis.StrictRedis.from_url
         self.conf_prefix = conf_prefix
+        kwargs.update({'decode_responses': decode_responses})
         self.kwargs = kwargs
 
-    async def initialize(self):
+    def initialize(self):
         # web service before start init
         if self.address:
-            self.cache = await self.create_pool(self.address, **self.kwargs)
+            self.cache = self._redis(self.address, **self.kwargs)
             logger.debug(f'Init redis connection from {self.address}')
-        elif self.conf_prefix:
+        elif self.conf_prefix and not self.is_sentinel:
             url = Config().get_option('redis',
                                       f'{self.conf_prefix}_redis_url',
                                       default=None)
             assert url, f'{self.conf_prefix}_redis_url config does not exist'
-            self.cache = await create_redis_pool(url, **self.kwargs)
+            self.cache = self._redis(url, **self.kwargs)
             logger.debug(f'Init redis connection from {url}')
         return self
 
@@ -122,7 +78,7 @@ class StrCache:
 
     @classmethod
     async def get_or_404(cls, key: Union[int,
-                                         str]) -> Callable[..., Awaitable]:
+                                         str]) -> Awaitable[Optional[str]]:
         data = await cls.get(key)
         if not data:
             raise NotFoundError
@@ -133,17 +89,14 @@ class StrCache:
             key: str,
             value: Any,
             *,
-            expire: int = 0,
-            pexpire: int = 0,
-            exist: Any = None):
-        return cls.cache.set(key,
-                             value,
-                             expire=expire,
-                             pexpire=pexpire,
-                             exist=exist)
+            ex=None,
+            px=None,
+            nx=False,
+            xx=False) -> Awaitable[bool]:
+        return cls.cache.set(key, value, ex=ex, px=px, nx=nx, xx=xx)
 
     @classmethod
-    def get(cls, key: Union[int, str]) -> Callable[..., Awaitable]:
+    def get(cls, key: Union[int, str]) -> Awaitable[str]:
         return cls.cache.get(str(key))
 
 
@@ -189,31 +142,31 @@ class DictCache:
 
     @classmethod
     async def get_or_404(cls, id_: Union[str,
-                                         int]) -> Callable[..., Awaitable]:
+                                         int]) -> Awaitable[Optional[dict]]:
         data = await cls.get(id_)
         if not data:
             raise NotFoundError
         return data
 
     @classmethod
-    async def get(cls, id_: Union[str, int]) -> Callable[..., Awaitable]:
+    async def get(cls, id_: Union[str, int]) -> Awaitable[Optional[dict]]:
         if not id_:
             return None
         data = await cls._get(cls._get_key(id_))
         return AttrDict(cls._get_convert(data)) if data else None
 
     @classmethod
-    async def get_cache(cls, **kwargs: Any) -> Callable[..., Awaitable]:
+    async def get_cache(cls, **kwargs: Any) -> Awaitable[Optional[dict]]:
         data = await cls._get(cls._get_dkey(**kwargs))
         return AttrDict(cls._get_convert(data)) if data else None
 
     @classmethod
-    def _get(cls, _key: str) -> Callable[..., Awaitable]:
+    def _get(cls, _key: str) -> Awaitable[Optional[dict]]:
         return cls.cache.hgetall(_key)
 
     @classmethod
-    def _set(cls, _key: str, **kwargs: Any) -> Callable[..., Awaitable]:
-        return cls.cache.hmset_dict(_key, **kwargs)
+    def _set(cls, _key: str, **kwargs: Any) -> Awaitable[bool]:
+        return cls.cache.hmset(_key, kwargs)
 
     @classmethod
     def _get_convert(cls, data: dict) -> dict:
@@ -245,30 +198,29 @@ class DictCache:
         return kwargs
 
     @classmethod
-    def set(cls, id_: Union[str, int],
-            **kwargs: Any) -> Callable[..., Awaitable]:
+    def set(cls, id_: Union[str, int], **kwargs: Any) -> Awaitable[bool]:
         kwargs = cls._set_filter(kwargs)
         return cls._set(cls._get_key(id_), **kwargs)
 
     @classmethod
-    def set_cache(cls, **kwargs: Any) -> Callable[..., Awaitable]:
+    def set_cache(cls, **kwargs: Any) -> Awaitable[bool]:
         kwargs = cls._set_filter(kwargs)
         return cls._set(cls._get_dkey(**kwargs), **kwargs)
 
     @classmethod
-    def remove(cls, id_: Union[int, str]) -> Callable[..., Awaitable]:
+    def remove(cls, id_: Union[int, str]) -> Awaitable[int]:
         return cls.cache.delete(cls._get_key(id_))
 
     @classmethod
-    def removes(cls, *ids_: Union[int, str]) -> Callable[..., Awaitable]:
+    def removes(cls, *ids_: Union[int, str]) -> Awaitable[int]:
         keys = [cls._get_key(_id) for _id in ids_]
         return cls.cache.delete(*keys)
 
     @classmethod
-    def remove_cache(cls, **kwargs: Any) -> Callable[..., Awaitable]:
+    def remove_cache(cls, **kwargs: Any) -> Awaitable[int]:
         return cls.cache.delete(cls._get_dkey(**kwargs))
 
     @classmethod
     def remove_key(cls, id_: Union[int, str],
-                   key: Union[int, str]) -> Callable[..., Awaitable]:
-        return cls.cache.hdel(cls._get_key(id_), key)
+                   *keys: Union[int, str]) -> Awaitable[int]:
+        return cls.cache.hdel(cls._get_key(id_), *keys)
