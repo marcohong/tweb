@@ -6,6 +6,7 @@ import types
 from typing import Union
 try:
     import uvloop
+    uvloop.install()
 except ImportError:
     uvloop = None
 
@@ -64,7 +65,9 @@ class HttpServer:
         self.conf = Config().initialize(conf_path)
 
     def _check_daemon(self):
-        _daemon = self.conf.get_bool_option('setting', '_daemon', default=True)
+        _daemon = self.conf.get_bool_option('setting',
+                                            '_daemon',
+                                            default=True)
         if (self.options.daemon is not None
                 and self.options.daemon is False) or _daemon is False:
             return False
@@ -148,13 +151,6 @@ class HttpServer:
         daemon.fork(_pfile)
         self.logger.info(f'Server pid [{os.getpid()}].')
 
-    def configure_loop_proxy(self):
-        # configure asyncio event loop proxy
-        if not uvloop:
-            return
-        uvloop.install()
-        self.logger.info('Configure uvloop succesed.')
-
     def configure_locale(self,
                          locale_path: str = None,
                          locale_name: str = 'messages') -> None:
@@ -236,8 +232,12 @@ class HttpServer:
             return
         _tasks = []
         for obj in tasks:
-            if obj['func'].__code__.co_argcount > 0:
-                _func = obj['func'](*obj.get('args'), **obj.get('kwargs'))
+            argcount = obj['func'].__code__.co_argcount
+            if argcount > 0:
+                if type(obj['func']) == 'method' and argcount == 1:
+                    _func = obj['func']()
+                else:
+                    _func = obj['func'](*obj.get('args'), **obj.get('kwargs'))
             else:
                 _func = obj['func']()
             if isinstance(_func, types.CoroutineType):
@@ -256,7 +256,6 @@ class HttpServer:
         self.configure_port()
         signal.SignalHandler.listen(self.stop_ioloop)
         self.configure_daemon()
-        self.configure_loop_proxy()
         # self.configure_locale()
         modules, settings_ = self.configure_settings(settings, module)
         self.create_application(settings_, modules)
