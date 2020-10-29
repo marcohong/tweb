@@ -29,7 +29,7 @@ pip install git+https://github.com/marcohong/tweb.git
 | uvloop       | >=0.14.0 | -         | 默认安装，如果不存在使用asyncio默认的循环事件    |
 | ujson        | >=3.0.0  | -         | 默认不安装，优先使用ujson                        |
 | pyjwt        | >=1.7.1  | -         | 默认不安装，引用token模块时需要安装              |
-| aioredis     | >=1.3.1  | -         | 默认不安装，引用cache模块时需要安装              |
+| aredis       | >=1.1.8  | -         | 默认不安装，引用cache模块时需要安装              |
 | peewee       | >=3.13.1 | -         | 默认不安装，引用database模块时需要安装           |
 | PyMySQL      | >=0.9.3  | -         | 默认不安装，引用database模块时需要安装           |
 | psycopg2     | >=2.8.5  | -         | 默认不安装，引用database模块时需要安装           |
@@ -117,19 +117,19 @@ def main():
 
 ##### 国际化配置
 
-> msgid "Address your visit does not exist"
-> msgid "Server to open a small guess"
-> msgid "The content submitted is incorrect"
-> msgid "Illegal token"
-> msgid "Token has expired"
-> msgid "Token authentication is successful"
-> msgid "Token authentication failure"
-> msgid "Login timed out, please log in again"
-> msgid "Image format is not supported"
-> msgid "Image pixel is too large"
-> msgid "Image size is too large"
-> msgid "Temporarily not uploading files over %sM"
-> msgid "Video format is not supported"
+msgid "Address your visit does not exist"
+msgid "Server to open a small guess"
+msgid "The content submitted is incorrect"
+msgid "Illegal token"
+msgid "Token has expired"
+msgid "Token authentication is successful"
+msgid "Token authentication failure"
+msgid "Login timed out, please log in again"
+msgid "Image format is not supported"
+msgid "Image pixel is too large"
+msgid "Image size is too large"
+msgid "Temporarily not uploading files over %sM"
+msgid "Video format is not supported"
 
 上述内容默认英文输入，[xform](https://github.com/marcohong/xform)国际化请参考文档
 
