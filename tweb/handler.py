@@ -19,10 +19,10 @@ class BaseHandler(tornado.web.RequestHandler):
     url_pattern: str = None
 
     def initialize(self):
-        self.form_error: dict = None
+        pass
 
     def on_finish(self):
-        self.form_error: dict = None
+        pass
 
     async def prepare(self):
         self.set_cors_header()
@@ -194,15 +194,17 @@ class BaseHandler(tornado.web.RequestHandler):
                 _msg = content(State.FAILED.value,
                                msg=self.lang(exc_info[1].message))
             else:
-                if self.form_error and exc_info[1].status_code == 400:
+                if hasattr(self,
+                           'form_error') and exc_info[1].status_code == 400:
                     self.set_status(200)
                     _msg = content(State.FAILED.value,
                                    msg=self.form_error['msg'],
-                                   error=self.form_error['error'],
-                                   data=None,
-                                   **kwargs)
+                                   error=self.form_error['error'])
                 else:
-                    _msg = self.lang('Server to open a small guess')
+                    _msg = content(
+                        State.FAILED.value,
+                        msg=self.lang('Server to open a small guess'))
+
         else:
             self.set_status(status_code)
             _msg = content(status_code,
