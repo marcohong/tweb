@@ -56,7 +56,7 @@ class Cache:
         if self._address:
             self.cache = self._redis(self._address, **self._kwargs)
             logger.debug(f'Init redis connection from {self._address}')
-        elif self._conf_prefix and not self.is_sentinel:
+        elif self._conf_prefix and self._model != 'sentinel':
             url = Config().get_option('redis',
                                       f'{self._conf_prefix}_redis_url',
                                       default=None)
@@ -75,7 +75,7 @@ class Cache:
         self.cache[name] = value
 
     def __delitem__(self, name):
-        del self.cache[name]
+        pass
 
 
 class StrCache:
