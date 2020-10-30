@@ -1,11 +1,19 @@
 import aredis
-from redis.sentinel import Sentinel
-from typing import Any, Optional, Union, Awaitable
+from aredis.sentinel import Sentinel
+from typing import Any, Optional, Union, Awaitable, List
 
 from .config import Config
 from .exceptions import NotFoundError
 from tweb.utils.attr_util import AttrDict
 from tweb.utils.log import logger
+
+__all__ = ['Cache', 'StrCache', 'DictCache']
+
+models = {
+    'strict': aredis.StrictRedis.from_url,
+    'sentinel': Sentinel,
+    'cluster': aredis.StrictRedisCluster
+}
 
 
 class Cache:
@@ -18,9 +26,9 @@ class Cache:
     cache = Cache(url).initialize()
     '''
     def __init__(self,
-                 address,
+                 address: Union[str, List[tuple]] = None,
                  conf_prefix: str = None,
-                 is_sentinel: bool = False,
+                 model: str = 'strict',
                  decode_responses=True,
                  **kwargs: Any):
         '''
@@ -31,32 +39,29 @@ class Cache:
         :param conf_prefix: `<str>` priority: address > conf_prefix
             e.g: user_redis_url -> MemRedis(conf_prefix='user')
             if is_sentinel is True, deprecated.
-        :param is_sentinel: `<bool>` default False
+        :param model: `<str>` ['strict','sentinel','cluster'], default strict
         :param kwargs: `<Any>` redis connection kwargs
         :return:
         '''
         self.cache = None
-        self.address = address
-        self.is_sentinel = is_sentinel
-        if is_sentinel:
-            self._redis = Sentinel
-        else:
-            self._redis = aredis.StrictRedis.from_url
-        self.conf_prefix = conf_prefix
+        self._address = address
+        self._model = model
+        self._redis = models.get(model, 'strict')
+        self._conf_prefix = conf_prefix
         kwargs.update({'decode_responses': decode_responses})
-        self.kwargs = kwargs
+        self._kwargs = kwargs
 
     def initialize(self):
         # web service before start init
-        if self.address:
-            self.cache = self._redis(self.address, **self.kwargs)
-            logger.debug(f'Init redis connection from {self.address}')
-        elif self.conf_prefix and not self.is_sentinel:
+        if self._address:
+            self.cache = self._redis(self._address, **self._kwargs)
+            logger.debug(f'Init redis connection from {self._address}')
+        elif self._conf_prefix and not self.is_sentinel:
             url = Config().get_option('redis',
-                                      f'{self.conf_prefix}_redis_url',
+                                      f'{self._conf_prefix}_redis_url',
                                       default=None)
-            assert url, f'{self.conf_prefix}_redis_url config does not exist'
-            self.cache = self._redis(url, **self.kwargs)
+            assert url, f'{self._conf_prefix}_redis_url config does not exist'
+            self.cache = self._redis(url, **self._kwargs)
             logger.debug(f'Init redis connection from {url}')
         return self
 
