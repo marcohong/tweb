@@ -100,9 +100,9 @@ def main():
 ```python
 # 文件 app/extensions.py
 from tweb.utils.plugins import plugins
-from tweb.cache import MemRedis
+from tweb.cache import Cache
 # 创建redis连接
-center_cache = MemRedis(conf_prefix='center')
+center_cache = Cache(conf_prefix='center')
 # 注册redis组件
 plugins.register(center_cache.initialize)
 
@@ -118,19 +118,19 @@ def main():
 
 ##### 国际化配置
 
-msgid "Address your visit does not exist"
-msgid "Server to open a small guess"
-msgid "The content submitted is incorrect"
-msgid "Illegal token"
-msgid "Token has expired"
-msgid "Token authentication is successful"
-msgid "Token authentication failure"
-msgid "Login timed out, please log in again"
-msgid "Image format is not supported"
-msgid "Image pixel is too large"
-msgid "Image size is too large"
-msgid "Temporarily not uploading files over %sM"
-msgid "Video format is not supported"
+msgid "Address your visit does not exist"  
+msgid "Server to open a small guess"  
+msgid "The content submitted is incorrect"  
+msgid "Illegal token"  
+msgid "Token has expired"  
+msgid "Token authentication is successful"  
+msgid "Token authentication failure"  
+msgid "Login timed out, please log in again"  
+msgid "Image format is not supported"  
+msgid "Image pixel is too large"  
+msgid "Image size is too large"  
+msgid "Temporarily not uploading files over %sM"  
+msgid "Video format is not supported"  
 
 上述内容默认英文输入，[xform](https://github.com/marcohong/xform)国际化请参考文档
 
