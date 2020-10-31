@@ -29,7 +29,8 @@ pip install git+https://github.com/marcohong/tweb.git
 | uvloop       | >=0.14.0 | -         | 默认安装，如果不存在使用asyncio默认的循环事件    |
 | ujson        | >=3.0.0  | -         | 默认不安装，优先使用ujson                        |
 | pyjwt        | >=1.7.1  | -         | 默认不安装，引用token模块时需要安装              |
-| aredis       | >=1.1.8  | -         | 默认不安装，引用cache模块时需要安装              |
+| aredis       | >=1.1.8  | -         | 默认不安装，引用cache/pubsub模块时需要安装       |
+| aio-pika     | >=6.7.0  | -         | 默认不安装，引用订阅pubsub模块的rabbitmq需要按照 |
 | peewee       | >=3.13.1 | -         | 默认不安装，引用database模块时需要安装           |
 | PyMySQL      | >=0.9.3  | -         | 默认不安装，引用database模块时需要安装           |
 | psycopg2     | >=2.8.5  | -         | 默认不安装，引用database模块时需要安装           |

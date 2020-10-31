@@ -5,6 +5,7 @@ uvloop>=0.14.0
 #Pillow>=7.1.2
 #pyjwt>=1.7.1
 #aredis>=1.1.8
+#aio-pika>=6.70
 #peewee>=3.13.3
 #psycopg2>=2.8.5
 #PyMySQL>=0.9.3
