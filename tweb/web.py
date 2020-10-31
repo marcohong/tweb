@@ -65,9 +65,7 @@ class HttpServer:
         self.conf = Config().initialize(conf_path)
 
     def _check_daemon(self):
-        _daemon = self.conf.get_bool_option('setting',
-                                            '_daemon',
-                                            default=True)
+        _daemon = self.conf.get_bool_option('setting', '_daemon', default=True)
         if (self.options.daemon is not None
                 and self.options.daemon is False) or _daemon is False:
             return False
@@ -234,7 +232,7 @@ class HttpServer:
         for obj in tasks:
             argcount = obj['func'].__code__.co_argcount
             if argcount > 0:
-                if type(obj['func']) == 'method' and argcount == 1:
+                if isinstance(obj['func'], types.MethodType) and argcount == 1:
                     _func = obj['func']()
                 else:
                     _func = obj['func'](*obj.get('args'), **obj.get('kwargs'))
