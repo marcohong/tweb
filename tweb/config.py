@@ -2,8 +2,9 @@ import os
 import sys
 import logging
 import configparser
+import string
+import random
 
-from tweb.utils.settings import DEF_COOKIE_SECRET
 from tweb.utils.environment import env
 from tweb.utils.single import SingleClass
 
@@ -19,14 +20,15 @@ access_control_allow_origin = *
 cookie_domain =
 cookie_secret_name = X-Token
 cookie_secret = {cookie_secret}
-_enable_jwt = True
 _debug = False
+_daemon = True
+_enable_jwt = True
 
 [log]
 level = INFO
 archive = True
-crontab_base_log_dir = log/
-access_path = log/access.log
+crontab_base_log_dir = /tmp
+access_path = /tmp/access.log
 
 [database]
 # mysql://user:passwd@ip:port/my_db
@@ -66,9 +68,11 @@ def get_cmd_conf():
             if not create_config:
                 return None
             os.makedirs(os.path.dirname(_path))
+        cookie_secret = ''.join(
+            random.sample(string.ascii_letters + string.digits + '=/$@&', 64))
         with open(_path, 'w') as file_:
             text = config_template.format(port=8888,
-                                          cookie_secret=DEF_COOKIE_SECRET)
+                                          cookie_secret=cookie_secret)
             file_.write(text.strip())
     return _path
 
