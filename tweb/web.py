@@ -3,6 +3,7 @@ import sys
 import socket
 import asyncio
 import types
+import signal as signal
 from typing import Union
 try:
     import uvloop
@@ -18,10 +19,11 @@ from tornado.options import options
 from .defines import parse_command
 from .router import app
 from tweb.utils import daemon
-from tweb.utils import signal
+from tweb.utils.signal import SignalHandler
+from tweb.utils import strings
 from tweb.utils.environment import env
 from tweb.utils.settings import default_settings,\
-    DEF_COOKIE_SECRET, DEF_TMP_DIR
+    DEF_COOKIE_SECRET
 
 
 class Application(tornado.web.Application):
@@ -71,12 +73,12 @@ class HttpServer:
             return False
         return True
 
-    def _get_server_pid(self) -> str:
+    def _get_pid_path(self) -> str:
         if self.options.pid and not os.path.exists(self.options.pid):
             base_dir = os.path.dirname(self.options.pid)
             if os.access(base_dir, os.W_OK):
                 return self.options.pid
-        return f'{DEF_TMP_DIR}/web.{self._port}.pid'
+        return os.path.join(strings.get_root_path(), 'server.pid')
 
     def _log_func(self, handler: tornado.web.RequestHandler) -> None:
         if handler.get_status() < 400:
@@ -111,7 +113,7 @@ class HttpServer:
             self._port = 8888
         else:
             self._port = self.options.port
-        if self.check_port(self._port):
+        if self.check_port(self._port) and self.options.signal is None:
             self.logger.error(
                 f'Server is running in http://localhost:{self._port}')
             sys.exit(1)
@@ -133,19 +135,37 @@ class HttpServer:
             return False
         return True
 
-    def stop_ioloop(self, signalnum, frame):
+    def process_signal(self, signalnum, frame):
         # received signal, stop server
-        self.logger.error(
-            f'Received system input signal: {signalnum}, closed server.')
-        IOLoop.current().stop()
-        sys.exit(1)
+        if signalnum != signal.SIGHUP:
+            self.logger.error(
+                f'Received system input signal: {signalnum}, closed server.')
+            IOLoop.current().stop()
+            sys.exit(1)
+        else:
+            SignalHandler.restart()
+
+    def _signal_handler(self) -> bool:
+        if self.options.signal:
+            if self.options.signal not in SignalHandler.signals:
+                self.logger.error(
+                    'Errors: signal options not in [restart, stop]')
+                sys.exit(1)
+            assert self._port, 'Please configure server port'
+            if not self.check_port(self._port):
+                return False
+            pid_file = self._get_pid_path()
+            return SignalHandler.signal_handler(
+                pid_file, self.signals[self.options.signal])
+        return False
 
     def configure_daemon(self):
         # setting daemon, command line parameter first
+        _pfile = self._get_pid_path()
         if self._check_daemon() is False:
             self.logger.info(f'Server pid [{os.getpid()}].')
+            daemon.write_pid(_pfile, os.getpid())
             return
-        _pfile = self._get_server_pid()
         daemon.fork(_pfile)
         self.logger.info(f'Server pid [{os.getpid()}].')
 
@@ -252,7 +272,9 @@ class HttpServer:
             self.conf = self.conf.reload(conf_path)
         self.configure_logger()
         self.configure_port()
-        signal.SignalHandler.listen(self.stop_ioloop)
+        if self._signal_handler():
+            return
+        SignalHandler.listen(self.process_signal)
         self.configure_daemon()
         # self.configure_locale()
         modules, settings_ = self.configure_settings(settings, module)
