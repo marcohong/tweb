@@ -22,9 +22,13 @@ def fork(pid_file: str) -> None:
     try:
         pid = os.fork()
         if pid > 0:
-            with open(pid_file, 'w') as _file:
-                _file.write(str(pid))
+            write_pid(pid_file, pid)
             sys.exit(0)
     except OSError as err:
         logging.error(f'fork #2 failed: {err.errno} ({err.strerror})')
         sys.exit(1)
+
+
+def write_pid(pid_file: str, pid: int) -> None:
+    with open(pid_file, 'w') as f:
+        f.write(str(pid))
