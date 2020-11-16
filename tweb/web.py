@@ -156,7 +156,7 @@ class HttpServer:
                 return False
             pid_file = self._get_pid_path()
             return SignalHandler.signal_handler(
-                pid_file, self.signals[self.options.signal])
+                pid_file, SignalHandler.signals[self.options.signal])
         return False
 
     def configure_daemon(self):
