@@ -16,6 +16,7 @@ usage::
     ret = Token.get_token(data)
 '''
 import time
+import abc
 import jwt
 from typing import Any, Optional
 import ujson
@@ -28,20 +29,36 @@ _SECRET = conf.get_option('setting', 'cookie_secret', DEF_COOKIE_SECRET)
 _ENABLE_JWT = conf.get_option('setting', '_enable_jwt', True)
 
 
-class TornadoToken:
+class AccessToken(metaclass=abc.ABCMeta):
+    @abc.abstractmethod
+    def create_token(cls,
+                     expires: int,
+                     secret: str = _SECRET,
+                     **payload: Any) -> str:
+        '''Create token
+
+        :param expires: `<int>` expires times(seconds)
+        :param secret: `<str>` default config sercet
+        :param payload: `<Any>`
+        :return: `<str>`
+        '''
+
+    @abc.abstractmethod
+    def get_token(cls, value: str, secret: str = _SECRET) -> Optional[dict]:
+        '''Get token
+
+        :param value: `<str>`
+        :param secret: `<str>` default config sercet
+        :return: `<dict>` or None
+        '''
+
+
+class TornadoToken(AccessToken):
     @classmethod
     def create_token(cls,
                      expires: int,
                      secret: str = _SECRET,
                      **payload: Any) -> str:
-        '''
-        Create token
-
-        :param expires: `<int>` expires times(seconds)
-        :param secret: `<str>` default config sercet
-        :param payload: `<Any>`
-        :return:
-        '''
         payload.update({'exp': int(time.time()) + expires})
         value = ujson.dumps(payload)
         ret = tornado.web.create_signed_value(secret, XTOKEN, value)
@@ -49,13 +66,6 @@ class TornadoToken:
 
     @classmethod
     def get_token(cls, value: str, secret: str = _SECRET) -> Optional[dict]:
-        '''
-        Get token
-
-        :param value: `<str>`
-        :param secret: `<str>` default config sercet
-        :return:
-        '''
         ret = {'state': False, 'msg': 'Login timed out, please log in again'}
         if not value:
             return ret
@@ -81,8 +91,9 @@ class TornadoToken:
 CookieToken = TornadoToken
 
 
-class JWTToken:
-    _headers = {'alg': 'HS256'}
+class JWTToken(AccessToken):
+    headers = {'alg': 'HS256'}
+    algorithm = 'HS256'
 
     @classmethod
     def create_token(cls,
@@ -92,8 +103,8 @@ class JWTToken:
         payload.update({'iat': time.time(), 'exp': int(time.time()) + expires})
         ret = jwt.encode(payload,
                          _secret,
-                         algorithm='HS256',
-                         headers=cls._headers)
+                         algorithm=cls.algorithm,
+                         headers=cls.headers)
         return ret.decode('utf-8')
 
     @classmethod
@@ -102,7 +113,9 @@ class JWTToken:
         if not value:
             return ret
         try:
-            ret['data'] = jwt.decode(value, _secret, algorithms=['HS256'])
+            ret['data'] = jwt.decode(value,
+                                     _secret,
+                                     algorithms=[cls.algorithm])
             ret['state'] = True
             ret['msg'] = 'Token authentication is successful'
         except KeyError:
