@@ -28,9 +28,13 @@ class Logger:
         if not path:
             return None
         log_path = get_real_path(path)
-        flag = create_file(os.path.dirname(log_path))
+        base_dir = os.path.dirname(log_path)
+        flag = create_file(base_dir)
         if not flag:
-            logging.error('Can not create log file directory.')
+            logging.warning(
+                f"Create log directory '{base_dir}' fail, use '/tmp' directory"
+            )
+            log_path = f'/tmp/{os.path.basename(log_path)}'
         return log_path
 
     @classmethod
