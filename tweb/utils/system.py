@@ -8,7 +8,7 @@ def create_file(path):
         try:
             os.makedirs(path)
         except OSError:
-            logging.error(trace_info)
+            logging.error(trace_info())
             return False
         else:
             return True
