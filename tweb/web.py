@@ -49,10 +49,12 @@ class HttpServer:
     Tornado web server class.
 
     '''
-    def __init__(self, router=None):
+    def __init__(self, router=None, ssl_options=None, addresss=""):
         env.setenv('CREATE_CONFIG', True)
         parse_command()
         self.router = router
+        self.ssl_options = ssl_options
+        self.address = addresss
         self.options = options
         self.application: Application = None
         self._conf_handlers = {}
@@ -149,7 +151,7 @@ class HttpServer:
         if self.options.signal:
             if self.options.signal not in SignalHandler.signals:
                 self.logger.error(
-                    'Errors: signal options not in [restart, stop]')
+                    'Error: signal options not in [restart, stop]')
                 sys.exit(1)
             assert self._port, 'Please configure server port'
             if not self.check_port(self._port):
@@ -216,11 +218,14 @@ class HttpServer:
         if not self.application:
             self.logger.error('Please create application.')
             sys.exit(1)
-        server = tornado.httpserver.HTTPServer(self.application, xheaders=True)
+        server = tornado.httpserver.HTTPServer(self.application,
+                                               xheaders=True,
+                                               ssl_options=self.ssl_options)
         if self.application.settings['debug'] is True:
-            server.listen(self._port)
+            server.listen(self._port, address=self.address)
         else:
-            sockets = tornado.netutil.bind_sockets(self._port)
+            sockets = tornado.netutil.bind_sockets(self._port,
+                                                   address=self.address)
             if options.proc is None:
                 proc = self.conf.get_int_option('setting',
                                                 'processes',
