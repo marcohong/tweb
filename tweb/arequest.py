@@ -1,8 +1,8 @@
-import logging
 from typing import Any, Awaitable, Callable, Optional
 from tornado import httpclient
+from tornado import simple_httpclient
 
-from .exceptions import trace_info
+from .exceptions import HTTPTimeoutError, HTTPError
 from tweb.utils.escape import json_dumps
 
 
@@ -33,10 +33,13 @@ async def request(url: str,
         kwargs['body'] = body
     try:
         resp = await httpclient.AsyncHTTPClient().fetch(url, **kwargs)
+    except simple_httpclient.HTTPTimeoutError as error:
+        raise HTTPTimeoutError(error.code, error.message,
+                               error.response) from error
+    except httpclient.HTTPError as herr:
+        raise HTTPError(herr.code, herr.message, herr.response) from herr
+    else:
         return resp
-    except Exception:
-        logging.error(trace_info())
-        return None
 
 
 def _build_headers(json: bool = False) -> dict:

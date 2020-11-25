@@ -6,6 +6,8 @@ from .response import failure, RespType
 from tweb.utils.escape import json_dumps
 from tweb.utils.log import logger
 
+__all__ = ['callback']
+
 
 def callback(func: Callable[..., Any]) -> Callable[..., Any]:
     '''

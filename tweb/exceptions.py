@@ -1,5 +1,6 @@
 import sys
 import traceback
+from typing import Any
 
 
 def trace_info() -> str:
@@ -55,4 +56,16 @@ class UpdateError(OperateError):
 
 
 class DeleteError(OperateError):
+    pass
+
+
+class HTTPError(Error):
+    def __init__(self, code: int, message: str = None, response: Any = None):
+        self.code = code
+        self.message = message
+        self.response = response
+        super().__init__(message)
+
+
+class HTTPTimeoutError(HTTPError):
     pass
