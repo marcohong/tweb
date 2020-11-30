@@ -2,7 +2,9 @@ import heapq
 from typing import Union
 import peewee
 import pymysql
-from playhouse.pool import PooledMySQLDatabase, MySQLDatabase, make_int
+import psycopg2
+from playhouse.pool import PooledMySQLDatabase, MySQLDatabase, \
+    PooledPostgresqlDatabase, PostgresqlDatabase, make_int
 from playhouse.db_url import register_database, connect, schemes, parse
 
 from tweb.utils.log import logger
@@ -28,12 +30,46 @@ def set_session(conn: pymysql.connect) -> None:
     cursor.execute("SET SESSION wait_timeout = 100000;")
 
 
-class RetryPooledMySQLDatabase(PooledMySQLDatabase):
-    def __init__(self, database, **kwargs):
-        self._slave_url = kwargs.pop('slave_url', None)
-        self._used_slave = False
-        super().__init__(database, **kwargs)
+class RetryDatabaseMixin:
+    def execute_sql(self, sql: str, params: dict = None, commit: bool = True):
+        '''
+        execute sql
 
+        :return Cursor:
+        '''
+        try:
+            cursor = super().execute_sql(sql, params, commit)
+        except (peewee.InterfaceError, peewee.OperationalError):
+            conn = self.connection()
+            if not self.is_closed():
+                if conn:
+                    conn.close()
+                self._state.set_connection(self._connect())
+
+            cursor = self.cursor(commit)
+            cursor.execute(sql, params or ())
+            if commit:
+                self.commit()
+        return cursor
+
+    def _switch_slave(self):
+        kwargs = parse(self._slave_url)
+        self.database = kwargs.pop('database')
+        self.connect_params = kwargs
+        logger.error(f'Used slave url conn database[{self._slave_url}]')
+
+    def _is_closed(self, conn) -> bool:
+        if not conn:
+            return True
+        try:
+            conn.ping(False)
+        except Exception:
+            return True
+        else:
+            return False
+
+
+class RetryPooledDatabaseMixin:
     def execute_sql(self,
                     sql: str,
                     params: Union[dict, list, tuple] = None,
@@ -45,8 +81,8 @@ class RetryPooledMySQLDatabase(PooledMySQLDatabase):
         '''
         try:
             cursor = super().execute_sql(sql, params, commit)
-        except peewee.PeeweeException:
-            logger.error('MySQL conn error, try again connect')
+        except (peewee.InterfaceError, peewee.OperationalError):
+            logger.error('Database conn error, try again connect')
             conn = self.connection()
             if self._is_closed(conn):
                 self._in_use.pop(self.conn_key(conn), None)
@@ -69,22 +105,7 @@ class RetryPooledMySQLDatabase(PooledMySQLDatabase):
         self._used_slave = True
         logger.error(f'Used slave url conn database[{self._slave_url}]')
 
-    def _connect(self) -> pymysql.connect:
-        try:
-            conn = super()._connect()
-        except pymysql.err.OperationalError as err:
-            if not self._slave_url or self._used_slave or \
-                    (err.args and err.args[0] != 2003):
-                raise err
-            self._switch_slave()
-            conn = super()._connect()
-        conn.connect()
-        set_session(conn)
-        logger.debug('Create new db connect, id: %s' % id(conn))
-        self.cur_thread_id = id(conn)
-        return conn
-
-    def _close(self, conn: pymysql.connect, close_conn: bool = False) -> None:
+    def _close(self, conn, close_conn=False) -> None:
         key = self.conn_key(conn)
         if close_conn:
             super()._close(conn)
@@ -100,8 +121,8 @@ class RetryPooledMySQLDatabase(PooledMySQLDatabase):
                 logger.debug('Returning %s to pool.', key)
                 heapq.heappush(self._connections, (ts.timestamp, conn))
 
-    def _is_closed(self, conn: pymysql.connect) -> bool:
-        if not conn or not conn._sock:
+    def _is_closed(self, conn) -> bool:
+        if not conn:
             return True
         try:
             conn.ping(False)
@@ -111,38 +132,11 @@ class RetryPooledMySQLDatabase(PooledMySQLDatabase):
             return False
 
 
-class RetryMySQLDatabase(MySQLDatabase):
+class RetryMySQLDatabase(RetryDatabaseMixin, MySQLDatabase):
     def __init__(self, database, **kwargs):
         self._slave_url = kwargs.pop('slave_url', None)
         self._used_slave = False
-        super().__init__(database, **kwargs)
-
-    def execute_sql(self, sql: str, params: dict = None, commit: bool = True):
-        '''
-        execute sql
-
-        :return Cursor:
-        '''
-        try:
-            cursor = super().execute_sql(sql, params, commit)
-        except peewee.OperationalError:
-            conn = self.connection()
-            if not self.is_closed():
-                if conn:
-                    conn.close()
-                self._state.set_connection(self._connect())
-
-            cursor = self.cursor(commit)
-            cursor.execute(sql, params or ())
-            if commit:
-                self.commit()
-        return cursor
-
-    def _switch_slave(self):
-        kwargs = parse(self._slave_url)
-        self.database = kwargs.pop('database')
-        self.connect_params = kwargs
-        logger.error(f'Used slave url conn database[{self._slave_url}]')
+        super(MySQLDatabase, self).__init__(database, **kwargs)
 
     def _connect(self) -> pymysql.connect:
         try:
@@ -156,15 +150,65 @@ class RetryMySQLDatabase(MySQLDatabase):
         set_session(conn)
         return conn
 
-    def _is_closed(self, conn: pymysql.connect) -> bool:
-        if not conn or not conn._sock:
-            return True
+
+class RetryPooledMySQLDatabase(RetryPooledDatabaseMixin, PooledMySQLDatabase):
+    def __init__(self, database, **kwargs):
+        self._slave_url = kwargs.pop('slave_url', None)
+        self._used_slave = False
+        super(PooledMySQLDatabase, self).__init__(database, **kwargs)
+
+    def _connect(self) -> pymysql.connect:
         try:
-            conn.ping(False)
-        except Exception:
-            return True
-        else:
-            return False
+            conn = super()._connect()
+        except pymysql.err.OperationalError as err:
+            if not self._slave_url or self._used_slave or \
+                    (err.args and err.args[0] != 2003):
+                raise err
+            self._switch_slave()
+            conn = super()._connect()
+        # conn.connect()
+        set_session(conn)
+        logger.debug('Create new db connect, id: %s' % id(conn))
+        self.cur_thread_id = id(conn)
+        return conn
+
+
+class RetryPostgresqlDatabase(RetryDatabaseMixin, PostgresqlDatabase):
+    def __init__(self, database, **kwargs):
+        self._slave_url = kwargs.pop('slave_url', None)
+        self._used_slave = False
+        super(PostgresqlDatabase, self).__init__(database, **kwargs)
+
+    def _connect(self) -> psycopg2.connect:
+        try:
+            conn = super()._connect()
+        except psycopg2.OperationalError as err:
+            if not self._slave_url or self._used_slave:
+                raise err
+            self._switch_slave()
+            conn = super()._connect()
+        return conn
+
+
+class RetryPooledPostgresqlDatabase(RetryPooledDatabaseMixin,
+                                    PooledPostgresqlDatabase):
+    def __init__(self, database, **kwargs):
+        self._slave_url = kwargs.pop('slave_url', None)
+        self._used_slave = False
+        super(PooledPostgresqlDatabase, self).__init__(database, **kwargs)
+
+    def _connect(self) -> psycopg2.connect:
+        try:
+            conn = super()._connect()
+        except psycopg2.OperationalError as err:
+            if not self._slave_url or self._used_slave:
+                raise err
+            self._switch_slave()
+            conn = super()._connect()
+        # conn.connect()
+        logger.debug('Create new db connect, id: %s' % id(conn))
+        self.cur_thread_id = id(conn)
+        return conn
 
 
 def connection(db_url: str,
@@ -173,10 +217,17 @@ def connection(db_url: str,
                autorollback: bool = True):
     kwargs = {}
     assert db_url, 'db_url is none, please configure.'
-    if not isinstance(schemes.get('mysql'), RetryMySQLDatabase):
-        register_database(RetryMySQLDatabase, 'mysql')
-    if not isinstance(schemes.get('mysql+pool'), RetryPooledMySQLDatabase):
-        register_database(RetryPooledMySQLDatabase, 'mysql+pool')
+    db_maps = {
+        'mysql': RetryMySQLDatabase,
+        'mysql+pool': RetryPooledMySQLDatabase,
+        'postgre': RetryPostgresqlDatabase,
+        'postgre+pool': RetryPooledPostgresqlDatabase,
+        'postgresql': RetryPostgresqlDatabase,
+        'postgresql+pool': RetryPooledPostgresqlDatabase
+    }
+    for key, val in db_maps.items():
+        register_database(val, key)
+
     if db_url.startswith('postgre'):
         kwargs['autocommit'] = autocommit
         kwargs['autorollback'] = autorollback
