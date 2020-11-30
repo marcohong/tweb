@@ -5,7 +5,7 @@ import pymysql
 import psycopg2
 from playhouse.pool import PooledMySQLDatabase, MySQLDatabase, \
     PooledPostgresqlDatabase, PostgresqlDatabase, make_int
-from playhouse.db_url import register_database, connect, schemes, parse
+from playhouse.db_url import register_database, connect, parse
 
 from tweb.utils.log import logger
 
@@ -211,10 +211,7 @@ class RetryPooledPostgresqlDatabase(RetryPooledDatabaseMixin,
         return conn
 
 
-def connection(db_url: str,
-               slave_url: str = None,
-               autocommit: bool = True,
-               autorollback: bool = True):
+def connection(db_url: str, slave_url: str = None, autocommit: bool = True):
     kwargs = {}
     assert db_url, 'db_url is none, please configure.'
     db_maps = {
@@ -228,10 +225,8 @@ def connection(db_url: str,
     for key, val in db_maps.items():
         register_database(val, key)
 
-    if db_url.startswith('postgre'):
-        kwargs['autocommit'] = autocommit
-        kwargs['autorollback'] = autorollback
-    elif db_url.startswith('mysql'):
+    kwargs['autocommit'] = autocommit
+    if db_url.startswith('mysql'):
         kwargs['sql_mode'] = 'NO_AUTO_CREATE_USER'
         if slave_url:
             kwargs['slave_url'] = slave_url
