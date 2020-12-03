@@ -6,7 +6,8 @@ import tornado.web
 from xform.form import Form
 
 from tweb.utils import strings
-from tweb.response import DATA_TYPE, State, content
+from tweb.response import content, DATA_TYPE
+from tweb.utils.ecodes import ECodes
 from tweb.utils.escape import json_dumps
 from tweb.utils.settings import CORS_HEADERS
 # from tweb.utils.log import logger
@@ -90,7 +91,8 @@ class BaseHandler(tornado.web.RequestHandler):
             try:
                 data = await self.form_validate(form)
             except tornado.web.HTTPError as err:
-                self.failure(msg=self.lang(err.message), data=err.error)
+                self.failure(code=1, msg=self.lang(err.message),
+                    error=err.error)
             #or
             data, error = await self.form_validate(form, _raise=False)
 
@@ -114,16 +116,18 @@ class BaseHandler(tornado.web.RequestHandler):
         '''
         Write success message to browser.
         '''
-        self.process(State.SUCCESS.value, msg, data, **kwargs)
+        ecode = ECodes.success
+        self.process(ecode[0], msg or ecode[1], data, **kwargs)
 
     def failure(self,
+                code: int,
                 msg: str = None,
                 data: DATA_TYPE = None,
                 **kwargs) -> None:
         '''
         Write failure message to browser.
         '''
-        self.process(State.FAILED.value, msg, data, **kwargs)
+        self.process(code, msg, data, **kwargs)
 
     def jsonify(self, **kwargs: Any) -> None:
         self.finish(json_dumps(kwargs))
@@ -191,39 +195,41 @@ class BaseHandler(tornado.web.RequestHandler):
         if exc_info:
             if isinstance(exc_info[1], Error):
                 self.set_status(200)
-                _msg = content(State.FAILED.value,
-                               msg=self.lang(exc_info[1].message))
+                code = exc_info[1].code if hasattr(exc_info[1],
+                                                   'code') else ECodes.fail[0]
+                ret = content(code, msg=self.lang(exc_info[1].message))
             else:
                 if hasattr(self,
                            'form_error') and exc_info[1].status_code == 400:
                     self.set_status(200)
-                    _msg = content(State.FAILED.value,
-                                   msg=self.form_error['msg'],
-                                   error=self.form_error['error'])
+                    ret = content(ECodes.fail[0],
+                                  msg=self.form_error['msg'],
+                                  error=self.form_error['error'])
                 else:
-                    _msg = content(
-                        State.FAILED.value,
-                        msg=self.lang('Server to open a small guess'))
+                    code = exc_info[1].status_code if hasattr(
+                        exc_info[1], 'status_code') else ECodes.fail[0]
+                    ret = content(
+                        code, msg=self.lang('Server to open a small guess'))
 
         else:
-            self.set_status(status_code)
-            _msg = content(status_code,
-                           msg=kwargs.get('msg')
-                           or self.lang('Server to open a small guess'))
+            self.set_status(200)
+            ret = content(status_code,
+                          msg=kwargs.get('msg')
+                          or self.lang('Server to open a small guess'))
 
         if strings.req_is_json(self.request) or self.err_resp_only_json:
             self.set_json_header()
-            self.finish(json_dumps(_msg['data']))
+            self.finish(json_dumps(ret))
         else:
             url = kwargs.get('url')
             if not url:
                 self.set_header('Content-Type', 'text/plain;charset=UTF-8')
-                self.finish(json_dumps(_msg['data']))
+                self.finish(json_dumps(ret))
             else:
-                self.render_html(url, data=_msg['data'])
+                self.render_html(url, data=ret)
 
     def process(self,
-                state: int,
+                code: int,
                 msg: str = None,
                 data: DATA_TYPE = None,
                 url: str = None,
@@ -232,12 +238,12 @@ class BaseHandler(tornado.web.RequestHandler):
         Process server write json data to client.
         cannot used @callback
         '''
-        _msg = content(state=state, msg=msg, data=data, **kwargs)
+        ret = content(code, msg=msg, data=data, **kwargs)
         if url:
-            self.render_html(url, data=_msg['data'])
+            self.render_html(url, data=ret)
         else:
             self.set_json_header()
-            self.finish(json_dumps(_msg['data']))
+            self.finish(json_dumps(ret))
 
     def render_html(self, template_name: str, **kwargs: Any) -> None:
         '''
@@ -300,10 +306,9 @@ class DefaultHandler(BaseHandler):
 
     async def get(self):
         if strings.req_is_json(self.request) or self.err_resp_only_json:
-            self.process(404,
-                         msg=self.lang('Address your visit does not exist'))
+            self.process(*ECodes.addr_not_found)
         else:
             self.set_header('Content-Type', 'text/html')
             data = self.html_template.format(
-                msg=self.lang('Address your visit does not exist'))
+                msg=self.lang(ECodes.addr_not_found[1]))
             self.finish(data)
