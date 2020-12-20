@@ -4,7 +4,7 @@ import socket
 import asyncio
 import types
 import signal as signal
-from typing import Union
+from typing import Any, Union
 try:
     import uvloop
     uvloop.install()
@@ -17,7 +17,7 @@ import tornado.options
 from tornado.options import options
 
 from .defines import parse_command
-from .router import app
+from .router import app, Router
 from tweb.utils import daemon
 from tweb.utils.signal import SignalHandler
 from tweb.utils import strings
@@ -49,7 +49,9 @@ class HttpServer:
     Tornado web server class.
 
     '''
-    def __init__(self, router=None, ssl_options=None, addresss=""):
+
+    def __init__(self, router: Router = None,
+                 ssl_options: Any = None, addresss: str = "") -> None:
         env.setenv('CREATE_CONFIG', True)
         parse_command()
         self.router = router
@@ -59,6 +61,7 @@ class HttpServer:
         self.application: Application = None
         self._conf_handlers = {}
         self._port = None
+        self._conf_locale = False
         self.logger = None
         self.conf = None
         self._init_config()
@@ -184,6 +187,7 @@ class HttpServer:
             tornado.locale.set_default_locale(
                 self.conf.get_option('setting', 'language', 'en_US'))
             tornado.locale.load_gettext_translations(locale_path, locale_name)
+            self._conf_locale = True
 
     def configure_default_handler(self, handler: tornado.web.RequestHandler):
         self._conf_handlers['default_handler_class'] = handler
@@ -244,6 +248,7 @@ class HttpServer:
         settings['server_config'] = self.options.conf
         settings['server_locale'] = self.conf.get_option(
             'setting', 'language', 'en_US')
+        settings['server_conf_locale'] = self._conf_locale
         self.logger.info(f"Daemon mode: {settings['server_daemon']}")
         self.logger.info(f"Debug mode: {settings['debug']}")
         self.logger.info(f'Archive log: {self.logger.is_archive}')
