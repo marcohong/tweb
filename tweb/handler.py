@@ -105,7 +105,7 @@ class BaseHandler(tornado.web.RequestHandler):
         data, error = await form.bind(self, locations=locations)
         if error:
             if _raise:
-                self.form_error = {'msg': self.lang(msg), 'error': error}
+                self.form_error = {'msg': msg, 'error': error}
                 raise tornado.web.HTTPError(400, msg)
         return data
 
@@ -120,7 +120,7 @@ class BaseHandler(tornado.web.RequestHandler):
         self.process(ecode[0], msg or ecode[1], data, **kwargs)
 
     def failure(self,
-                code: int,
+                code: int = ECodes.fail[0],
                 msg: str = None,
                 data: DATA_TYPE = None,
                 **kwargs) -> None:
@@ -203,7 +203,7 @@ class BaseHandler(tornado.web.RequestHandler):
                            'form_error') and exc_info[1].status_code == 400:
                     self.set_status(200)
                     ret = content(ECodes.fail[0],
-                                  msg=self.form_error['msg'],
+                                  msg=self.lang(self.form_error['msg']),
                                   error=self.form_error['error'])
                 else:
                     code = exc_info[1].status_code if hasattr(
@@ -238,6 +238,8 @@ class BaseHandler(tornado.web.RequestHandler):
         Process server write json data to client.
         cannot used @callback
         '''
+        if msg and self.settings['server_conf_locale']:
+            msg = self.lang(msg)
         ret = content(code, msg=msg, data=data, **kwargs)
         if url:
             self.render_html(url, data=ret)
