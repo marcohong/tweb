@@ -23,6 +23,7 @@ import ujson
 import tornado.web
 from .config import conf
 from tweb.utils.settings import DEF_COOKIE_SECRET
+from tweb.utils.ecodes import ECodes
 
 XTOKEN = conf.get_option('setting', 'cookie_secret_name', 'X-Token')
 _SECRET = conf.get_option('setting', 'cookie_secret', DEF_COOKIE_SECRET)
@@ -49,7 +50,7 @@ class AccessToken(metaclass=abc.ABCMeta):
 
         :param value: `<str>`
         :param secret: `<str>` default config sercet
-        :return: `<dict>` or None
+        :return: `<dict>` {state:bool,code:int,msg:str,data:Any} or None
         '''
 
 
@@ -66,25 +67,31 @@ class TornadoToken(AccessToken):
 
     @classmethod
     def get_token(cls, value: str, secret: str = _SECRET) -> Optional[dict]:
-        ret = {'state': False, 'msg': 'Login timed out, please log in again'}
+        ret = {'state': False}
         if not value:
+            code, message = ECodes.login_timeout
+            ret.update({'code': code, 'msg': message})
             return ret
         try:
             data = tornado.web.decode_signed_value(secret, XTOKEN, value)
             if not data:
-                ret.update({'msg': 'Illegal token'})
+                code, message = ECodes.illegal_token
+                ret.update({'code': code, 'msg': message})
                 return ret
+
             data = ujson.loads(data)
             if float(data['exp']) < float(time.time()):
-                ret.update({'msg': 'Token has expired'})
-                return ret
-            ret.update({
-                'data': data,
-                'state': True,
-                'msg': 'Token authentication is successful'
-            })
+                code, message = ECodes.token_expired
+            else:
+                code, message = ECodes.token_auth_success
+                ret.update({
+                    'data': data,
+                    'state': True
+                })
+            ret.update({'code': code, 'msg': message})
         except ValueError:
-            ret['msg'] = 'Token authentication failure'
+            code, message = ECodes.token_auth_fail
+            ret.update({'code': code, 'msg': message})
         return ret
 
 
@@ -109,23 +116,26 @@ class JWTToken(AccessToken):
 
     @classmethod
     def get_token(cls, value: str, _secret: str = _SECRET) -> Optional[dict]:
-        ret = {'state': False, 'msg': 'Login timed out, please log in again'}
+        ret = {'state': False}
         if not value:
+            code, message = ECodes.login_timeout
+            ret.update({'code': code, 'msg': message})
             return ret
         try:
             ret['data'] = jwt.decode(value,
                                      _secret,
                                      algorithms=[cls.algorithm])
             ret['state'] = True
-            ret['msg'] = 'Token authentication is successful'
+            code, message = ECodes.token_auth_success
         except KeyError:
-            ret['msg'] = 'Invalid token secret'
+            code, message = ECodes.invalid_token_secret
         except jwt.exceptions.DecodeError:
-            ret['msg'] = 'Token authentication failure'
+            code, message = ECodes.token_auth_fail
         except jwt.exceptions.ExpiredSignatureError:
-            ret['msg'] = 'Token has expired'
+            code, message = ECodes.token_expired
         except jwt.exceptions.InvalidTokenError:
-            ret['msg'] = 'Illegal token'
+            code, message = ECodes.illegal_token
+        ret.update({'code': code, 'msg': message})
         return ret
 
 
