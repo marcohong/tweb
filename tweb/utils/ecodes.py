@@ -72,7 +72,9 @@ class ECodes(dict):
     success = (0, 'ok')
     fail = (1, 'fail')
     addr_not_found = (404, 'Address your visit does not exist')
-
-
-class ECodeUtil:
-    pass
+    token_auth_success = (0, 'Token authentication is successful')
+    login_timeout = (10001, 'Login timed out, please log in again')
+    illegal_token = (10002, 'Illegal token')
+    invalid_token_secret = (10003, 'Invalid token secret')
+    token_expired = (10004, 'Token has expired')
+    token_auth_fail = (10006, 'Token authentication failure')
