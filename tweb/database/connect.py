@@ -8,6 +8,7 @@ from playhouse.pool import PooledMySQLDatabase, MySQLDatabase, \
 from playhouse.db_url import register_database, connect, parse
 
 from tweb.utils.log import logger
+from tweb.exceptions import trace_info
 
 # peewee debug code
 # import loggerging
@@ -40,6 +41,8 @@ class RetryDatabaseMixin:
         try:
             cursor = super().execute_sql(sql, params, commit)
         except (peewee.InterfaceError, peewee.OperationalError):
+            logger.error('Database conn error, try again connect')
+            logger.error(trace_info())
             conn = self.connection()
             if not self.is_closed():
                 if conn:
@@ -83,6 +86,7 @@ class RetryPooledDatabaseMixin:
             cursor = super().execute_sql(sql, params, commit)
         except (peewee.InterfaceError, peewee.OperationalError):
             logger.error('Database conn error, try again connect')
+            logger.error(trace_info())
             conn = self.connection()
             if self._is_closed(conn):
                 self._in_use.pop(self.conn_key(conn), None)
