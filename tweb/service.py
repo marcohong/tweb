@@ -269,7 +269,7 @@ class BaseService(object):
             ids = [ids]
         return self.empty.delete().where(self.empty.id << ids).execute()
 
-    def assert_exist(self, pks: [int, list, tuple]) -> None:
+    def assert_exist(self, pks: Union[int, list, tuple]) -> None:
         '''
         Check data exists.
 
@@ -281,7 +281,7 @@ class BaseService(object):
         if not flag:
             raise NotFoundError
 
-    def exist(self, pk: [int, list, tuple]) -> bool:
+    def exist(self, pk: Union[int, list, tuple]) -> bool:
         if isinstance(pk, (list, tuple)):
             length = len(pk)
             query = (self.empty._meta.primary_key << pk, )
