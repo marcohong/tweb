@@ -1,21 +1,12 @@
 from typing import Union, Any
 
-__all__ = ['DATA_TYPE', 'content', 'Codes']
-
-
-# default codes, return json message code
-class Codes:
-    SUCCESS = 0
-    FAILED = 1
-    NO_LOGIN = 10001
-    INVALID_TOKEN = 10002
-    NO_PERMISSION = 10003
-
+from tweb.utils.ecodes import ECodes
+__all__ = ['DATA_TYPE', 'content']
 
 DATA_TYPE = Union[None, dict, list, tuple, str, bytes, float]
 
 
-def content(code: int = Codes.SUCCESS,
+def content(code: int = ECodes.success[0],
             msg: str = None,
             data: DATA_TYPE = None,
             **kwargs: Any) -> dict:
