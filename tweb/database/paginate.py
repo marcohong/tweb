@@ -270,16 +270,16 @@ class MySqlPages(BasePages):
 def pager(obj: peewee.Model,
           page: int = 1,
           limit: int = 20,
-          order: Union[str, tuple] = None,
+          order: tuple = None,
           ignores: Union[str, list] = None,
-          fks: Union[str, list] = None,
+          fks: Union[str, list, tuple] = None,
           columns: Union[None, str, list] = None,
           ** kwargs: Any) -> dict:
     '''
     :param obj: `<peewee.model>` object
     :param page: `<int>` default page=1
     :param limit: `<int>` default limit=20
-    :param order: `<tuple>` order columns
+    :param order: `<tuple/list>` order columns
         eg: (-User.id,) or (User.id, -User.age)
     :param ignores: `<list>` ignore columns return
     :param fks: `<dict>` fk name，
@@ -317,11 +317,8 @@ def pager(obj: peewee.Model,
     return result
 
 
-def fmt_idx_data(datas: peewee.Model,
+def fmt_idx_data(data: peewee.Model,
                  ignores: Union[str, list] = None,
                  fks: Union[str, list] = None,
                  columns: Union[None, str, list] = None) -> list:
-    data = list()
-    for d in datas:
-        data.append(d.get_dict(ignores, fks=fks, columns=columns))
-    return data
+    return [d.get_dict(ignores, fks=fks, columns=columns) for d in data]

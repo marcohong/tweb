@@ -77,7 +77,7 @@ class BaseHandler(tornado.web.RequestHandler):
     async def form_validate(self,
                             form: Form,
                             msg: str = 'The content submitted is incorrect',
-                            _raise: bool = True,
+                            raise_: bool = True,
                             locations: Union[str, tuple] = None) -> dict:
         '''Form validation.
 
@@ -94,17 +94,17 @@ class BaseHandler(tornado.web.RequestHandler):
                 self.failure(code=1, msg=self.lang(err.message),
                     error=err.error)
             #or
-            data, error = await self.form_validate(form, _raise=False)
+            data, error = await self.form_validate(form, raise_=False)
 
         :param form: `<Form>`
         :param msg: `<str>`
-        :param _raise: `<bool>` raise exception, default `True`
+        :param raise_: `<bool>` raise exception, default `True`
         :return: `<dict>` data
         :raise HTTPError:
         '''
         data, error = await form.bind(self, locations=locations)
         if error:
-            if _raise:
+            if raise_:
                 self.form_error = {'msg': msg, 'error': error}
                 raise tornado.web.HTTPError(400, msg)
         return data

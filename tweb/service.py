@@ -2,14 +2,16 @@
 Base service class.
 '''
 import peewee
-from typing import Any, Union
+from typing import Any, Union, Optional
 from tweb.database.paginate import pager
 from tweb.exceptions import NotFoundError
 from tweb.utils import strings
 
 # Default page=1 and limit=20
 DEF_PAGE, DEF_LIMIT = 1, 20
-IGNORES = Union[None, str, list, tuple]
+IGNORE_TYPE = Union[None, str, list, tuple]
+ID_TYPE = Union[str, int]
+ORDER_TYPE = Union[str, tuple]
 NULL_VALUES = (None, '')
 
 
@@ -17,7 +19,7 @@ def st_filter(obj: peewee.Model, value: int) -> Any:
     '''
     Filter status
 
-    :param obj: `<peewee.model>` eg: Menu
+    :param obj: `<peewee.model>` eg: Admin
     :param value: `<int>`
     '''
     if value is not None:
@@ -48,12 +50,15 @@ def not_in(field: peewee.Field, value: Any) -> bool:
     return in_or_eq(field, value, True)
 
 
-def like(lst: list,
-         field: peewee.Field,
-         query: dict,
-         name: str = None) -> None:
+def like(lst: list, field: peewee.Field,
+         query: dict, name: str = None) -> None:
     '''
     Append fuzzy query condition.
+
+    e.g:
+
+        query = {'name','chin'}
+        lst.append(field ** f'{name}%')
 
     :param lst: `<list>` query list
     :param field: `<peewee.field>` query columns
@@ -61,11 +66,12 @@ def like(lst: list,
     :param name: `<str>` parameter name，default column name
     '''
     result = query.get(name if name else field.name)
-    if result not in NULL_VALUES and isinstance(lst, list):
-        if result.startswith('%') or result.endswith('%'):
-            lst.append(field**result)
-        else:
-            lst.append(field**f'{result}%')
+    if result in NULL_VALUES or not isinstance(lst, list):
+        return
+    if result.startswith('%') or result.endswith('%'):
+        lst.append(field ** result)
+    else:
+        lst.append(field ** f'{result}%')
 
 
 def _fn_filter_over(obj: peewee.Query,
@@ -122,7 +128,7 @@ def case_when(query: str, field: str) -> peewee.SQL:
     return peewee.SQL(f'CASE WHEN {query} THEN {field} END')
 
 
-def ordering(order: Union[str, tuple], model: peewee.Model) -> tuple:
+def ordering(order: ORDER_TYPE, model: peewee.Model) -> tuple:
     '''
     Process sql order by.
 
@@ -136,8 +142,7 @@ def ordering(order: Union[str, tuple], model: peewee.Model) -> tuple:
     '''
     if isinstance(order, str):
         _order = []
-        orders = order.split(',')
-        for obj in orders:
+        for obj in order.split(','):
             item = obj.split()
             key, val = (item[0], 'desc') if len(item) == 1 else item
             if not hasattr(model, key):
@@ -155,15 +160,14 @@ def ordering(order: Union[str, tuple], model: peewee.Model) -> tuple:
     return _order
 
 
-def filter_fields(model: peewee.Model, ignores: Union[str, list]) -> tuple:
+def filter_fields(model: peewee.Model, ignores: IGNORE_TYPE) -> tuple:
     '''Filter ignores fields.
 
     :param model: `<peewee.model>`
     :param ignores: `<list>` ignore columns
     return: `<tuple>`
     '''
-    if not ignores:
-        ignores = []
+    ignores = ignores or []
     if isinstance(ignores, str):
         ignores = [ignores]
     keys = list(model._meta.fields.keys())
@@ -172,7 +176,7 @@ def filter_fields(model: peewee.Model, ignores: Union[str, list]) -> tuple:
 
 
 def fmt_data(datas: peewee.Model,
-             ignores: list = None,
+             ignores: IGNORE_TYPE = None,
              fmt: bool = True) -> Union[peewee.Model, list]:
     '''
     Format data to dict.
@@ -198,20 +202,19 @@ class BaseService(object):
                 return True
         return False
 
-    def find_by_id(self, pk: Union[int, str]) -> peewee.Model:
+    def find_by_id(self, pk: ID_TYPE) -> Optional[peewee.Model]:
         if not pk:
             return None
         return self.empty.fetchone(self.empty._meta.primary_key == pk)
 
-    def get_or_404(self, pk: Union[int, str]) -> peewee.Model:
+    def get_or_404(self, pk: ID_TYPE) -> Optional[peewee.Model]:
         data = self.find_by_id(pk)
         if not data:
             raise NotFoundError
         return data
 
     def find_by_condition(self, *query: Any, **kwargs: Any) -> peewee.Model:
-        data = self.empty.fetchone(*query, **kwargs)
-        return data
+        return self.empty.fetchone(*query, **kwargs)
 
     def find(self, pk: int = None, **columns: Any) -> peewee.Model:
         '''
@@ -239,7 +242,7 @@ class BaseService(object):
         '''
         return self.empty.create(**cloumns)
 
-    def update(self, pk: Union[int, str], **columns: Any) -> int:
+    def update(self, pk: ID_TYPE, **columns: Any) -> int:
         return self.empty.update(**columns).where(
             self.empty.id == pk).execute()
 
@@ -308,8 +311,8 @@ class BaseService(object):
 
     def find_all(self,
                  query: tuple = None,
-                 order: Union[str, tuple] = None,
-                 ignores: Union[str, list] = None,
+                 order: ORDER_TYPE = None,
+                 ignores: IGNORE_TYPE = None,
                  fmt: bool = True) -> Union[peewee.Model, list]:
         '''
         :param query: `<tuple>` query condition
@@ -332,23 +335,23 @@ class BaseService(object):
     def find_by_page(self,
                      page: int = DEF_PAGE,
                      limit: int = DEF_LIMIT,
-                     order: Union[None, tuple] = None,
-                     ignores: Union[None, list] = None,
+                     order: ORDER_TYPE = None,
+                     ignores: IGNORE_TYPE = None,
                      fks: Union[None, dict] = None,
                      **kwargs: Any) -> dict:
-        '''
-        分页查询
-        :param page: `<int>` 页数 默认第1页
-        :param limit: `<int>` 一页返回多少条记录 默认20
-        :param order: `<tuple>` 排序
-        :param ignores: `<list>` 忽略的字段
-        :param fks: `<dict>` 外键自带值
-        :param kwargs: 查询的字段(自定义) 查看self._query(query)方法定义
+        '''Query by page.
+
+        :param page: `<int>` default page=1
+        :param limit: `<int>` return records, default 20
+        :param order: `<tuple>` e.g: ('id desc','name asc')
+        :param ignores: `<list>` ignore fields
+        :param fks: `<dict>` fk name，
+        eg:{'dept_id':['id','name'],'role_id':'name'},value maybe str or list,
+        return {'dept_id':{'name':'test','id':1},'role_id':'test'}
+        :param kwargs: others parameters see self._query(query) methods
         :returns: `<dict>`
         '''
-        query = self._query(kwargs, self.empty)
-        if not query:
-            query = []
+        query = self._query(kwargs, self.empty) or []
         data = self.find_all(query=tuple(query),
                              order=order,
                              ignores=ignores,
@@ -364,6 +367,16 @@ class BaseService(object):
         '''Query filter
 
         User-defined query filter condition.
+
+        e.g:
+
+            def _query(self, query, obj):
+                result = list()
+                if query.get('status'):
+                    result.append(obj.status == query['status'])
+                if query.get('name'):
+                    like(result, obj.name, query)
+                return result
 
         :param query: `<dict>` query
         :param obj: `<peewee.model>` obj
@@ -389,13 +402,13 @@ class BaseService(object):
               data: peewee.Model,
               page: int = DEF_PAGE,
               limit: int = DEF_LIMIT,
-              order: Union[str, tuple] = None,
-              ignores: Union[str, list] = None,
-              fks: Union[str, list] = None,
+              order: ORDER_TYPE = None,
+              ignores: IGNORE_TYPE = None,
+              fks: Union[str, list, tuple] = None,
               **kwargs: Any) -> dict:
         '''Query by page
         '''
-        if order and isinstance(order, (str, tuple)):
+        if order and isinstance(order, (str, list, tuple)):
             kwargs['_order'] = order
             order = ordering(order, data.model)
         return pager(data,

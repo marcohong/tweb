@@ -61,7 +61,9 @@ class BaseModel(peewee.Model):
         '''
         data = copy.copy(self.__dict__.get('__data__'))
         # process ignore fields
-        if ignore and isinstance(ignore, list):
+        if ignore:
+            if not isinstance(ignore, (list, tuple)):
+                ignore = [ignore]
             intersection = list(set(data.keys()).intersection(ignore))
             for key in intersection:
                 del data[key]
