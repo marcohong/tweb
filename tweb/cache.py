@@ -15,6 +15,8 @@ models = {
     'cluster': aredis.StrictRedisCluster
 }
 
+ID_TYPE = Union[int, str]
+
 
 class Cache:
     '''
@@ -25,6 +27,7 @@ class Cache:
     url = 'redis://localhost:6379/0'
     cache = Cache(url).initialize()
     '''
+
     def __init__(self,
                  address: Union[str, List[tuple]] = None,
                  conf_prefix: str = None,
@@ -82,14 +85,6 @@ class StrCache:
     cache = None
 
     @classmethod
-    async def get_or_404(cls, key: Union[int,
-                                         str]) -> Awaitable[Optional[str]]:
-        data = await cls.get(key)
-        if not data:
-            raise NotFoundError
-        return data
-
-    @classmethod
     def set(cls,
             key: str,
             value: Any,
@@ -101,13 +96,25 @@ class StrCache:
         return cls.cache.set(key, value, ex=ex, px=px, nx=nx, xx=xx)
 
     @classmethod
-    def get(cls, key: Union[int, str]) -> Awaitable[str]:
-        return cls.cache.get(str(key))
+    def get(cls, key: ID_TYPE) -> Awaitable[str]:
+        return cls.cache.get(f'{key}')
+
+    @classmethod
+    async def get_or_404(cls, key: ID_TYPE) -> Awaitable[Optional[str]]:
+        data = await cls.get(key)
+        if not data:
+            raise NotFoundError
+        return data
+
+    @classmethod
+    def exists(cls, key: ID_TYPE) -> Awaitable[bool]:
+        return cls.cache.exists(f'{key}')
 
 
 class DictCache:
     cache = None
-    __rdskey__: str = 'default:dict:{0}'
+    # __rdskey__ eg: module:{0} ({0}->id)
+    __rdskey__: str = None
     # ignore fields
     __filters__: tuple = None
     # convert fields mapping, bool use DictCache._bool
@@ -146,15 +153,18 @@ class DictCache:
         return AttrDict(data)
 
     @classmethod
-    async def get_or_404(cls, id_: Union[str,
-                                         int]) -> Awaitable[Optional[dict]]:
+    def exists(cls, id_: ID_TYPE) -> Awaitable[bool]:
+        return cls.cache.exists(cls._get_key(id_))
+
+    @classmethod
+    async def get_or_404(cls, id_: ID_TYPE) -> Awaitable[Optional[dict]]:
         data = await cls.get(id_)
         if not data:
             raise NotFoundError
         return data
 
     @classmethod
-    async def get(cls, id_: Union[str, int]) -> Awaitable[Optional[dict]]:
+    async def get(cls, id_: ID_TYPE) -> Awaitable[Optional[dict]]:
         if not id_:
             return None
         data = await cls._get(cls._get_key(id_))
@@ -166,12 +176,12 @@ class DictCache:
         return AttrDict(cls._get_convert(data)) if data else None
 
     @classmethod
-    def _get(cls, _key: str) -> Awaitable[Optional[dict]]:
-        return cls.cache.hgetall(_key)
+    def _get(cls, key: str) -> Awaitable[Optional[dict]]:
+        return cls.cache.hgetall(key)
 
     @classmethod
-    def _set(cls, _key: str, **kwargs: Any) -> Awaitable[bool]:
-        return cls.cache.hmset(_key, kwargs)
+    def _set(cls, key_: str, **kwargs: Any) -> Awaitable[bool]:
+        return cls.cache.hmset(key_, kwargs)
 
     @classmethod
     def _get_convert(cls, data: dict) -> dict:
@@ -203,7 +213,7 @@ class DictCache:
         return kwargs
 
     @classmethod
-    def set(cls, id_: Union[str, int], **kwargs: Any) -> Awaitable[bool]:
+    def set(cls, id_: ID_TYPE, **kwargs: Any) -> Awaitable[bool]:
         kwargs = cls._set_filter(kwargs)
         return cls._set(cls._get_key(id_), **kwargs)
 
@@ -213,11 +223,11 @@ class DictCache:
         return cls._set(cls._get_dkey(**kwargs), **kwargs)
 
     @classmethod
-    def remove(cls, id_: Union[int, str]) -> Awaitable[int]:
+    def remove(cls, id_: ID_TYPE) -> Awaitable[int]:
         return cls.cache.delete(cls._get_key(id_))
 
     @classmethod
-    def removes(cls, *ids_: Union[int, str]) -> Awaitable[int]:
+    def removes(cls, *ids_: ID_TYPE) -> Awaitable[int]:
         keys = [cls._get_key(_id) for _id in ids_]
         return cls.cache.delete(*keys)
 
@@ -226,6 +236,5 @@ class DictCache:
         return cls.cache.delete(cls._get_dkey(**kwargs))
 
     @classmethod
-    def remove_key(cls, id_: Union[int, str],
-                   *keys: Union[int, str]) -> Awaitable[int]:
+    def remove_key(cls, id_: ID_TYPE, *keys: ID_TYPE) -> Awaitable[int]:
         return cls.cache.hdel(cls._get_key(id_), *keys)
