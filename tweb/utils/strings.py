@@ -7,6 +7,10 @@ import random
 import datetime
 
 
+def get_start_shell() -> str:
+    return os.path.abspath(sys.argv[0])
+
+
 def get_root_path(path: str = None) -> str:
     '''
     Get project base path, default start shell dir
@@ -15,16 +19,13 @@ def get_root_path(path: str = None) -> str:
     :return:
     '''
     if path and not os.path.exists(path):
-        path = os.path.dirname(os.path.abspath(sys.argv[0]))
+        path = os.path.dirname(get_start_shell())
     else:
-        path = os.path.dirname(os.path.abspath(sys.argv[0]))
+        path = os.path.dirname(get_start_shell())
     return path
 
 
-ROOT_PATH = get_root_path()
-
-
-def get_real_path(path: str, root_path: str = ROOT_PATH) -> str:
+def get_real_path(path: str, root_path: str = None) -> str:
     '''
     get file real path
     '''
@@ -36,7 +37,7 @@ def get_real_path(path: str, root_path: str = ROOT_PATH) -> str:
     elif path.startswith('/'):
         return path
     else:
-        return os.path.join(root_path, path)
+        return os.path.join(get_root_path(), path)
 
 
 def browser(user_agent: str, origin_agent: str) -> str:
