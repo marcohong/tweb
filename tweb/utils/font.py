@@ -4,7 +4,7 @@ from PIL import ImageFont
 from tweb.utils.single import SingleClass
 __all__ = ['DefaultFont']
 
-ROOT_PATH = os.path.abspath(
+TWEB_ROOT_PATH = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
 
 
@@ -20,7 +20,7 @@ class DefaultFont(SingleClass):
         :return:
         '''
         if not font:
-            font = os.path.join(ROOT_PATH, 'tweb', 'fonts',
+            font = os.path.join(TWEB_ROOT_PATH, 'tweb', 'fonts',
                                 'SourceHanSansSC-Normal.otf')
         self.font = font
 
