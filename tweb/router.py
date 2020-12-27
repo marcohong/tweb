@@ -1,5 +1,4 @@
 import os
-import sys
 import logging
 from typing import Any, Union, Optional
 from itertools import chain
@@ -8,6 +7,7 @@ import importlib
 
 from .exceptions import trace_info
 from tweb.utils.single import SingleClass
+from tweb.utils import strings
 '''
 Tornado router.
 
@@ -34,7 +34,7 @@ coding...
 
 '''
 
-allow_type = ['py', 'pyc', 'pyo', 'pyd', 'so']
+allow_type = frozenset(['py', 'pyc', 'pyo', 'pyd', 'so'])
 
 
 class Router(SingleClass):
@@ -167,19 +167,19 @@ class Router(SingleClass):
         except ImportError:
             logging.error(trace_info())
 
-    def auto_inject(self, ignore_dirs: Union[list] = None) -> None:
-        start_shell = os.path.abspath(sys.argv[0])
-        base_dir = os.path.dirname(start_shell)
-        files = self._get_file_path(os.path.dirname(start_shell), [])
-        files = set(files).difference(
-            [start_shell, os.path.dirname(start_shell)])
+    def auto_inject(self, ignore_dirs: Union[list, tuple] = None) -> None:
+        base_dir = strings.get_root_path()
+        files = self._get_file_path(base_dir, [])
+        ignores = [strings.get_start_shell(), base_dir]
+        if ignore_dirs and isinstance(ignore_dirs, (list, tuple)):
+            ignores.extend(ignore_dirs)
+        files = set(files).difference(ignores)
         self._load_modules(files, base_dir)
 
     def inject_module(self, *module_bases: str) -> None:
         if not module_bases:
             return
-        start_shell = os.path.abspath(sys.argv[0])
-        base_dir = os.path.dirname(start_shell)
+        base_dir = strings.get_root_path()
         paths = []
         for module_base in module_bases:
             _path = os.path.join(base_dir, module_base.replace('.', '/'))
