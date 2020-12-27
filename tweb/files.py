@@ -186,6 +186,7 @@ def get_file_md5(path: str) -> str:
                     break
                 m.update(data)
         else:
+            data = _f.read(st_size)
             m.update(data)
     return m.hexdigest()
 
