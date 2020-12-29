@@ -1,6 +1,6 @@
 ### Tweb
 
-Tornado、uvloop、aioreids集成web环境，快速搭建应用开发
+Tornado、uvloop、aioreids、peewee集成web环境，快速搭建应用开发
 
 ------
 
@@ -10,7 +10,11 @@ Tornado、uvloop、aioreids集成web环境，快速搭建应用开发
 
 ##### Python版本
 
-python3.6 python 3.7 python3.8
+​	python3.6 
+
+​	python 3.7
+
+​	python3.8
 
 ##### pip安装
 
@@ -59,12 +63,13 @@ if __name__ == "__main__":
     main()
 
 # python3 mian.py 默认使用8888端口
-# option --conf=[dev,local,server]配置文件，默认在main.py同级conf目录下，如果没有启动前默认创建conf/server.conf
-# option --port 端口默认8888
-# option --daemon 是否后台执行 默认true
-# option --debug 是否打开debug 默认false
-# option --pid pid输入文件 默认/tmp/web.{port}.pid
-# option --proc 默认系统cpu个数，debug模式下proc=1
+# option -c/--conf 选项[dev,local,server]配置文件，默认在main.py同级conf目录下，如果没有启动前默认创建conf/server.conf
+# option -p/--port 端口默认8888
+# option -d/--daemon 是否后台执行 默认true
+# option -debug 是否打开debug 默认false
+# option -pid pid输入文件 默认/tmp/web.{port}.pid
+# option -proc 默认系统cpu个数，debug模式下proc=1
+# option -s/--signal 选择[restart,stop] 重启或停止
 # 注意: 命令行参数优先conf参数
 ```
 
@@ -74,8 +79,9 @@ if __name__ == "__main__":
 
 ```python
 # 请在初始化HttpServer之前引入
-from tornado.options import define
-define('name', default=None, type=str, help='App name')
+from tornado.options import CommandLine
+cmdline = CommandLine()
+cmdline.add_argument('n','--name', type=str, help='App name')
 ```
 
 ##### 装载handler
@@ -139,7 +145,7 @@ msgid "Video format is not supported"
 ```python
 # message.po文件详细请参考Python开发文档
 # 使用Python的tools目录下msgfmt.py文件生产messages.mo
-# python3 -o messages.mo file1.po file2.po ...
+# python3 msgfmt.py -o messages.mo file1.po file2.po ...
 
 from tweb.web import HttpServer
 def main():
