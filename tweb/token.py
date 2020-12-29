@@ -21,9 +21,11 @@ import jwt
 from typing import Any, Optional
 import ujson
 import tornado.web
+
 from .config import conf
 from tweb.utils.settings import DEF_COOKIE_SECRET
 from tweb.utils.ecodes import ECodes
+
 
 XTOKEN = conf.get_option('setting', 'cookie_secret_name', 'X-Token')
 _SECRET = conf.get_option('setting', 'cookie_secret', DEF_COOKIE_SECRET)
@@ -31,10 +33,11 @@ _ENABLE_JWT = conf.get_option('setting', '_enable_jwt', True)
 
 
 class AccessToken(metaclass=abc.ABCMeta):
+
     @abc.abstractmethod
     def create_token(cls,
                      expires: int,
-                     secret: str = _SECRET,
+                     secret: str,
                      **payload: Any) -> str:
         '''Create token
 
@@ -45,7 +48,7 @@ class AccessToken(metaclass=abc.ABCMeta):
         '''
 
     @abc.abstractmethod
-    def get_token(cls, value: str, secret: str = _SECRET) -> Optional[dict]:
+    def get_token(cls, value: str, secret: str) -> Optional[dict]:
         '''Get token
 
         :param value: `<str>`
@@ -105,17 +108,17 @@ class JWTToken(AccessToken):
     @classmethod
     def create_token(cls,
                      expires: int,
-                     _secret: str = _SECRET,
+                     secret: str = _SECRET,
                      **payload: Any) -> str:
         payload.update({'iat': time.time(), 'exp': int(time.time()) + expires})
         ret = jwt.encode(payload,
-                         _secret,
+                         secret,
                          algorithm=cls.algorithm,
                          headers=cls.headers)
         return ret.decode('utf-8')
 
     @classmethod
-    def get_token(cls, value: str, _secret: str = _SECRET) -> Optional[dict]:
+    def get_token(cls, value: str, secret: str = _SECRET) -> Optional[dict]:
         ret = {'state': False}
         if not value:
             code, message = ECodes.login_timeout
@@ -123,7 +126,7 @@ class JWTToken(AccessToken):
             return ret
         try:
             ret['data'] = jwt.decode(value,
-                                     _secret,
+                                     secret,
                                      algorithms=[cls.algorithm])
             ret['state'] = True
             code, message = ECodes.token_auth_success
