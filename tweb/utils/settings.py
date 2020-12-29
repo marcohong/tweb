@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 import tornado.web
 
 # Default cookie secret, if server.conf not config
@@ -18,6 +19,38 @@ CORS_HEADERS = {
                                      'Origin, X-Requested-With, '
                                      'X-Token, X-CSRFToken')
 }
+
+
+class TronadoStdout:
+    '''
+    See tornado.log define_logging_options method
+    '''
+    _data = dict(logging='info',
+                 log_to_stderr=True,
+                 log_file_prefix=None,
+                 log_file_max_size=100 * 1000 * 1000,
+                 log_file_num_backups=10,
+                 log_rotate_when='midnight',
+                 log_rotate_interval=1,
+                 log_rotate_mode='size')
+
+    @classmethod
+    def set(cls, key: str, value: Any) -> None:
+        if key not in cls._data:
+            raise KeyError
+        cls._data[key] = value
+
+    @classmethod
+    def has_opt(cls, key: str) -> bool:
+        return key not in cls._data
+
+    @classmethod
+    def get(cls, key: str) -> Any:
+        return cls._data[key]
+
+    @classmethod
+    def getall(cls) -> dict:
+        return cls._data
 
 
 def default_log_func(handler: tornado.web.RequestHandler) -> None:
