@@ -3,6 +3,7 @@ import sys
 import socket
 import asyncio
 import types
+from functools import partial
 import signal as signal
 from typing import Any, Union
 try:
@@ -14,15 +15,16 @@ except ImportError:
 import tornado.web
 from tornado.ioloop import IOLoop
 import tornado.options
-from tornado.options import options
+from tornado.log import enable_pretty_logging
 
-from .defines import parse_command
+from .defines import CommandLine
 from .router import app, Router
 from tweb.utils import daemon
+from tweb.utils.attr_util import AttrDict
 from tweb.utils.signal import SignalHandler
 from tweb.utils import strings
 from tweb.utils.environment import env
-from tweb.utils.settings import default_settings,\
+from tweb.utils.settings import default_settings, TronadoStdout,\
     DEF_COOKIE_SECRET
 
 
@@ -51,30 +53,39 @@ class HttpServer:
     '''
 
     def __init__(self, router: Router = None,
-                 ssl_options: Any = None, addresss: str = "") -> None:
+                 ssl_options: Any = None, addresss: str = "",
+                 options: AttrDict = None) -> None:
         env.setenv('CREATE_CONFIG', True)
-        parse_command()
         self.router = router
         self.ssl_options = ssl_options
         self.address = addresss
-        self.options = options
         self.application: Application = None
         self._conf_handlers = {}
         self._port = None
         self._conf_locale = False
         self.logger = None
+        self.options = None
         self.conf = None
+        self._init_options(options)
         self._init_config()
 
+    def _init_options(self, options: AttrDict = None):
+        if not options:
+            self.options = CommandLine().parse_args()
+        else:
+            self.options = options
+            for k, v in options.items():
+                if TronadoStdout.has_opt(k):
+                    TronadoStdout.set(k, v)
+        enable_pretty_logging(AttrDict(TronadoStdout.getall()))
+
     def _init_config(self):
-        from .config import Config, get_cmd_conf
-        conf_path = get_cmd_conf()
-        self.conf = Config().initialize(conf_path)
+        from .config import conf
+        self.conf = conf
 
     def _check_daemon(self):
         _daemon = self.conf.get_bool_option('setting', '_daemon', default=True)
-        if (self.options.daemon is not None
-                and self.options.daemon is False) or _daemon is False:
+        if self.options.daemon is False or _daemon is False:
             return False
         return True
 
@@ -85,19 +96,20 @@ class HttpServer:
                 return self.options.pid
         return os.path.join(strings.get_root_path(), 'server.pid')
 
-    def _log_func(self, handler: tornado.web.RequestHandler) -> None:
+    @staticmethod
+    def _log_func(logger, handler: tornado.web.RequestHandler) -> None:
         if handler.get_status() < 400:
-            log_method = self.logger.info
+            log_method = logger.info
         elif handler.get_status() < 500:
-            log_method = self.logger.warning
+            log_method = logger.warning
         else:
-            log_method = self.logger.error
+            log_method = logger.error
         req_time = 1000.0 * handler.request.request_time()
         log_method('%d %s %.2fms', handler.get_status(),
                    handler._request_summary(), req_time)
 
     @staticmethod
-    def check_port(port: int, addr: str = 'localhost') -> bool:
+    def check_port(port: int, addr: str = '0.0.0.0', timeout: int = 1) -> bool:
         '''
         check port status
 
@@ -106,7 +118,7 @@ class HttpServer:
         :return: True -> used, False -> not used
         '''
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(1)
+        sock.settimeout(timeout)
         code = sock.connect_ex((addr, port))
         sock.close()
         return True if code == 0 else False
@@ -132,13 +144,15 @@ class HttpServer:
         if settings_:
             data.update(settings_)
         if 'log_function' not in data:
-            data.update({'log_function': self._log_func})
+            data.update({'log_function': partial(self._log_func, self.logger)})
         return data
 
     def is_debug(self):
-        if self.options.debug is not None and self.options.debug is False:
-            return False
-        return True
+        if self.options.debug is True:
+            return True
+        if self.conf.get_bool_option('setting', '_debug', False):
+            return True
+        return False
 
     def process_signal(self, signalnum, frame):
         # received signal, stop server
@@ -207,14 +221,11 @@ class HttpServer:
         if self._conf_handlers:
             settings.update(self._conf_handlers)
         modules = []
-        if self.options.debug is not None and self.options.debug is False:
-            settings['autoreload'] = False
-            settings['debug'] = False
-        elif settings['debug'] is False:
-            settings['autoreload'] = False
-        else:
+        if self.options.debug:
             settings['autoreload'] = True
             settings['debug'] = True
+        else:
+            settings['autoreload'] = settings['debug']
         modules = app.loading_handlers(name=module)
         return modules, settings
 
@@ -230,12 +241,12 @@ class HttpServer:
         else:
             sockets = tornado.netutil.bind_sockets(self._port,
                                                    address=self.address)
-            if options.proc is None:
+            if self.options.proc is None:
                 proc = self.conf.get_int_option('setting',
                                                 'processes',
                                                 default=0)
             else:
-                proc = options.proc
+                proc = self.options.proc
             tornado.process.fork_processes(proc)
             server.add_sockets(sockets)
         self.logger.info(f'Running on: http://localhost:{self._port}')
@@ -276,10 +287,7 @@ class HttpServer:
     def start(self,
               settings: dict = None,
               tasks: Union[list] = None,
-              module: str = None,
-              conf_path: str = None) -> None:
-        if conf_path and os.path.isfile(conf_path):
-            self.conf = self.conf.reload(conf_path)
+              module: str = None) -> None:
         self.configure_logger()
         self.configure_port()
         if self._signal_handler():
