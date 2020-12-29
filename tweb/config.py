@@ -1,12 +1,13 @@
 import os
-import sys
 import logging
 import configparser
 import string
 import random
+from typing import Optional
 
 from tweb.utils.environment import env
 from tweb.utils.single import SingleClass
+from tweb.defines import CommandLine
 
 __all__ = ['conf', 'Config']
 
@@ -43,35 +44,31 @@ center_redis_url = redis://localhost:6379/0?encoding=utf8
 '''
 
 
-def get_cmd_conf():
+def get_cmd_conf() -> Optional[str]:
     '''
     Get conf path from command lines.
 
     usage::
 
-    python3 app.py --conf=server
+    python3 main.py -c server
+    python3 main.py --conf server
+    python3 main.py --conf=server
     '''
-    args = sys.argv
-    name, _path = None, None
-    for idx, opt in enumerate(args[1:]):
-        if not opt.startswith('--conf') and not opt.startswith('-c'):
-            continue
-        name = opt.split('=')[1] if '=' in opt else args[idx + 2]
-        break
-    if not name:
-        name = 'server'
+    name = CommandLine.parse_conf()
+    return get_conf_file(name)
+
+
+def get_conf_file(name: str, port: int = 8888) -> Optional[str]:
     _path = os.path.join(env.getenv('ROOT_PATH'), 'conf', f'{name}.conf')
-    create_config = env.getenv('CREATE_CONFIG')
     if not os.path.exists(_path):
         if not os.path.exists(os.path.dirname(_path)):
-            # logging.error('No such directory: %s' % os.path.dirname(_path))
-            if not create_config:
+            if not env.getenv('CREATE_CONFIG'):
                 return None
             os.makedirs(os.path.dirname(_path))
         cookie_secret = ''.join(
             random.sample(string.ascii_letters + string.digits + '=/$@&', 64))
         with open(_path, 'w') as file_:
-            text = config_template.format(port=8888,
+            text = config_template.format(port=port,
                                           cookie_secret=cookie_secret)
             file_.write(text.strip())
     return _path
@@ -93,7 +90,6 @@ class Config(SingleClass):
                 return self
             path = get_cmd_conf()
             if not path or not os.path.exists(path):
-                # logging.warning(f'Configure file does not exist[{path}]')
                 return None
         self.conf_path = path
         self.parser(self.conf_path)
@@ -105,15 +101,6 @@ class Config(SingleClass):
         _path = path or env.getenv('ROOT_PATH')
         self.conf = configparser.ConfigParser()
         self.conf.read(_path)
-
-    def reload(self, path: str) -> None:
-        if not path:
-            return
-        if path[0] not in ('/', '~', '.'):
-            path = os.path.join(env.getenv('ROOT_PATH'), path)
-        if os.path.exists(path):
-            self.conf_path = path
-            self.parser(self.conf_path)
 
     def get_option(self,
                    section: str,
