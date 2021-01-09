@@ -2,10 +2,13 @@ import os
 import sys
 import socket
 import asyncio
+import time
 import types
+import threading
 from functools import partial
+from collections import OrderedDict
 import signal as signal
-from typing import Any, Union
+from typing import Any, Callable, Union
 try:
     import uvloop
     uvloop.install()
@@ -66,6 +69,8 @@ class HttpServer:
         self.logger = None
         self.options = None
         self.conf = None
+        # e.g: val = [conn.closed,(True,),{...}]
+        self._atexit_callbacks = OrderedDict()
         self._init_options(options)
         self._init_config()
 
@@ -84,10 +89,7 @@ class HttpServer:
         self.conf = conf
 
     def _check_daemon(self):
-        _daemon = self.conf.get_bool_option('setting', '_daemon', default=True)
-        if self.options.daemon is False or _daemon is False:
-            return False
-        return True
+        return self.options.daemon
 
     def _get_pid_path(self) -> str:
         if self.options.pid and not os.path.exists(self.options.pid):
@@ -154,11 +156,59 @@ class HttpServer:
             return True
         return False
 
-    def process_signal(self, signalnum, frame):
+    def atexit_register(self, callback: Callable,
+                        *args: Any, **kwargs: Any) -> None:
+        '''
+        Register callback function, when system exit before execute.
+
+        e.g:
+
+            async def unregister(name):
+                ...
+
+            def conn_close(db,ignore=False):
+                ...
+
+            http = HttpServer()
+            http.atexit_register(unregister, 'name')
+            http.atexit_register(conn_close, db, ignore=True)
+            http.start()
+
+        :param callback: `<callable>`
+        :return:
+        '''
+        assert isinstance(callback, Callable), 'callback must be callable'
+        self._atexit_callbacks[time.time()] = [callback, args, kwargs]
+
+    def _atexit_call(self):
+        if not self._atexit_callbacks:
+            return
+        loop = asyncio.new_event_loop()
+        loop_thread = threading.Thread(
+            target=self._start_thread_loop, args=(loop,))
+        loop_thread.setDaemon(True)
+        loop_thread.start()
+        for _, callable_ in self._atexit_callbacks.items():
+            callback, args, kwargs = callable_
+            func_ = callback(*args, **kwargs)
+            if isinstance(func_, types.CoroutineType):
+                future = asyncio.run_coroutine_threadsafe(func_, loop)
+                future.result()
+
+    @staticmethod
+    def _start_thread_loop(loop):
+        asyncio.set_event_loop(loop)
+        loop.run_forever()
+
+    def _atexit_signal(self, signalnum, frame):
         # received signal, stop server
         if signalnum != signal.SIGHUP:
             self.logger.error(
                 f'Received system input signal: {signalnum}, closed server.')
+            try:
+                self._atexit_call()
+            except (Exception, RuntimeError):
+                pass
             IOLoop.current().stop()
             sys.exit(1)
         else:
@@ -221,7 +271,7 @@ class HttpServer:
         if self._conf_handlers:
             settings.update(self._conf_handlers)
         modules = []
-        if self.options.debug:
+        if self.options.debug is True:
             settings['autoreload'] = True
             settings['debug'] = True
         else:
@@ -236,17 +286,15 @@ class HttpServer:
         server = tornado.httpserver.HTTPServer(self.application,
                                                xheaders=True,
                                                ssl_options=self.ssl_options)
-        if self.application.settings['debug'] is True:
+        if self.options.proc is None:
+            proc = self.conf.get_int_option('setting', 'processes', default=0)
+        else:
+            proc = self.options.proc
+        if self.application.settings['debug'] is True or proc == 1:
             server.listen(self._port, address=self.address)
         else:
             sockets = tornado.netutil.bind_sockets(self._port,
                                                    address=self.address)
-            if self.options.proc is None:
-                proc = self.conf.get_int_option('setting',
-                                                'processes',
-                                                default=0)
-            else:
-                proc = self.options.proc
             tornado.process.fork_processes(proc)
             server.add_sockets(sockets)
         self.logger.info(f'Running on: http://localhost:{self._port}')
@@ -292,7 +340,7 @@ class HttpServer:
         self.configure_port()
         if self._signal_handler():
             return
-        SignalHandler.listen(self.process_signal)
+        SignalHandler.listen(self._atexit_signal)
         self.configure_daemon()
         # self.configure_locale()
         modules, settings_ = self.configure_settings(settings, module)
