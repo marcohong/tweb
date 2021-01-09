@@ -4,7 +4,7 @@ from tweb.router import router
 from tweb.utils.plugins import plugins
 from tweb.cache import Cache
 from tweb.pubsub import RedisPublishSubscribe
-
+# cache = Cache(conf_prefix='center')
 url = 'redis://localhost:6379/0'
 cache = Cache(url)
 channel = 'test:channel'
