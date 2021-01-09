@@ -12,6 +12,7 @@ usage:
     plugins.register(test2)
 '''
 import types
+from collections import OrderedDict
 from typing import Optional, Any
 
 from tweb.utils.single import SingleClass
@@ -20,7 +21,7 @@ __all__ = ['plugins']
 
 class Plugins(SingleClass):
     # {id:{func,args,kwargs}}
-    _methods = {}
+    _methods = OrderedDict()
 
     def register(self, func: callable, *args: Any, **kwargs: Any) -> None:
         '''

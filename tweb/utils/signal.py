@@ -5,7 +5,7 @@ import psutil
 
 
 class SignalHandler:
-    # cmdline -signal=restart/stop
+    # cmdline -s restart/stop or --signal=restart/stop
     signals = {'restart': signal.SIGHUP, 'stop': signal.SIGTERM}
 
     @classmethod

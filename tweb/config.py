@@ -22,7 +22,6 @@ cookie_domain =
 cookie_secret_name = X-Token
 cookie_secret = {cookie_secret}
 _debug = False
-_daemon = True
 _enable_jwt = True
 
 [log]
