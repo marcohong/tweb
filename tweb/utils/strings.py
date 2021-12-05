@@ -60,7 +60,7 @@ def get_browser(user_agent: str) -> str:
     origin_agent = user_agent
     user_agent = user_agent.lower()
     if not user_agent:
-        return 'UnKnown'
+        return 'Unkown'
     elif 'windows' in user_agent:
         if 'trident' in user_agent:
             return 'IE'
@@ -91,7 +91,7 @@ def get_os(user_agent: str) -> str:
     elif 'linux' in user_agent:
         return 'Linux'
     else:
-        return 'UnKnown'
+        return 'Unkown'
 
 
 def is_chinese(word: str) -> bool:
