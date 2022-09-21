@@ -110,7 +110,7 @@ def req_is_json(request) -> bool:
     :param request: `<tornado.web.httputil.HTTPServerRequest>`
     :return: `<bool>` True is json, else return False
     '''
-    if 'application/json' in request.headers.get('Accept', ''):
+    if 'application/json' in request.headers.get('Content-Type', ''):
         return True
     return False
 
